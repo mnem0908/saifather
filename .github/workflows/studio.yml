@@ -36,4 +36,5 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           HANDOVER: ${{ inputs.handover }}
+          SA_PUBLIC_CHECK_BASE: http://127.0.0.1:3847
         run: bash scripts/studio-run.sh
