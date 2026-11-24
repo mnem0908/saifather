@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SA Motion Studio</title>
+<style>
+  :root { --bg:#fbf7f3; --fg:#241a16; --mute:#6b5d54; --a:#e8431f; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,"Segoe UI",Tahoma,sans-serif; }
+  .box { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px; text-align:center; box-sizing:border-box; }
+  h1 { margin:0; font-size:1.6rem; background:linear-gradient(135deg,#ff7a2f,#e8321f); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p { margin:0; color:var(--mute); line-height:1.7; max-width:30rem; }
+  .dot { width:12px; height:12px; border-radius:50%; background:var(--a); animation:p 1s infinite alternate; }
+  @keyframes p { from { opacity:.25 } to { opacity:1 } }
+  input,button { font:inherit; padding:12px 16px; border-radius:12px; border:1px solid var(--mute); background:transparent; color:var(--fg); min-width:14rem; }
+  button { background:linear-gradient(135deg,#ff7a2f,#e8321f); border-color:transparent; color:#fff; font-weight:700; cursor:pointer; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🎬 SA Motion Studio</h1>
+  <div class="dot" id="dot"></div>
+  <p id="msg">جاري البحث عن الاستوديو…</p>
+  
+  <button id="go" hidden>دخول</button>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var owner = location.hostname.split(".")[0];
+  var repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  var RAW = "https://raw.githubusercontent.com/" + owner + "/" + repo + "/main/link.json";
+  var API = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/link.json";
+  function getKey() {
+    var h = decodeURIComponent((location.hash || "").slice(1));
+    try { if (h) { localStorage.setItem("sa_key", h); history.replaceState(null, "", location.pathname); return h; } } catch (e) { if (h) return h; }
+    try { return localStorage.getItem("sa_key") || ""; } catch (e) { return ""; }
+  }
+  function say(t, busy) { $("msg").textContent = t; $("dot").hidden = !busy; }
+  function alive(url) {
+    return new Promise(function (ok) {
+      var im = new Image(); var done = false;
+      var fin = function (v) { if (!done) { done = true; ok(v); } };
+      im.onload = function () { fin(true); }; im.onerror = function () { fin(false); };
+      setTimeout(function () { fin(false); }, 8000);
+      im.src = url.replace(/\/$/, "") + "/icon.svg?t=" + Date.now();
+    });
+  }
+  var tries = 0;
+  async function run() {
+    try {
+      var j = null;
+      try {
+        var ra = await fetch(API, { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } });
+        if (ra.ok) { var o = await ra.json(); j = JSON.parse(decodeURIComponent(escape(atob(String(o.content).replace(/\s/g, ""))))); }
+      } catch (e) {}
+      if (!j) { var r = await fetch(RAW + "?t=" + Date.now(), { cache: "no-store" }); j = await r.json(); }
+      if (j && j.url && await alive(j.url)) {
+        say("تم العثور على الاستوديو… جاري الدخول", true);
+        location.replace(j.url.replace(/\/$/, "") + "/");
+        return;
+      }
+    } catch (e) {}
+    tries++;
+    say("الاستوديو يعيد التشغيل أو يُجهَّز الآن، سأعيد المحاولة تلقائيًا… (" + tries + ")", true);
+    setTimeout(run, 10000);
+  }
+  run();
+})();
+</script>
+</body>
+</html>
