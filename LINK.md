@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://viking-proteins-teenage-ripe.trycloudflare.com
+الرابط الحالي المباشر: https://acquire-mississippi-thomas-rfc.trycloudflare.com
 
-آخر تحديث: 2026-11-24 21:27 UTC — تشغيل رقم 45490990980
+آخر تحديث: 2026-11-25 02:47 UTC — تشغيل رقم 45535287196
