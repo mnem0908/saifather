@@ -28,7 +28,10 @@ def split_code(code, engine, hf_code=None):
         rem = "" if (engine == "hyperframes" or looks_html(code)) else code
     if hf is None and looks_html(code):
         hf = code
-    return engine, rem, hf or ""
+    hf = hf or ""
+    if engine == "remotion" and not rem.strip() and hf.strip():
+        engine = "hyperframes"
+    return engine, rem, hf
 
 
 def looks_html(code):
@@ -446,24 +449,402 @@ window.drawFrame=function(t,SA){SA.fit(root,1080,1920);
   l_.style.width=(SA.p(t,.7,1.5,'expo')*420)+'px'};
 </script></body></html>"""
 
-# طبقة Remotion شفافة للدمج: ترجمة + شريط تقدم فوق خلفية HyperFrames
-MERGE_OVERLAY_TSX = r"""import React from "react";
-import { AbsoluteFill, getInputProps, useVideoConfig } from "remotion";
-import { Captions, ProgressBar, SA } from "./sa_kit";
+MERGE_ROLES_TSX = r"""import React from "react";
+import { AbsoluteFill, Easing, getInputProps, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { Burst, FONT } from "./sa_kit";
 
-// طبقة شفافة (alpha) تُركَّب فوق تركيبة HyperFrames. لا تضع خلفية هنا.
-export const Motion: React.FC<any> = (props) => {
-  let inp: any = {};
-  try { inp = getInputProps() || {}; } catch (e) {}
-  const segments = (props.segments && props.segments.length ? props.segments : inp.segments) || [];
+const THEME: Record<string, string> = __THEME__;
+const SERIES: string = __SERIES__;
+const SHOW_CAPTIONS: boolean = __CAPTIONS__;
+const LINES: any[] = __LINES__;
+
+const col = (k: string, d: string) => THEME[k] || d;
+const clampO = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+
+type Ctx = { u: number; fps: number };
+
+const sp = (lt: number, d: number, fps: number, damping = 12, stiffness = 140) =>
+  Math.max(0, spring({ frame: Math.round((lt - d) * fps), fps, config: { damping, stiffness } }));
+
+const Pop: React.FC<{ lt: number; d?: number; c: Ctx; rise?: boolean; style?: React.CSSProperties; children?: React.ReactNode }> = ({ lt, d = 0, c, rise, style, children }) => {
+  const s = sp(lt, d, c.fps);
+  const k = Math.min(1, s);
+  const tf = rise ? `translateY(${(1 - k) * 60 * c.u}px)` : `scale(${0.6 + Math.min(1.12, s) * 0.4})`;
+  return <div style={{ opacity: Math.min(1, s * 1.6), transform: tf, ...style }}>{children}</div>;
+};
+
+const Words: React.FC<{ text: string; lt: number; c: Ctx; size: number; color: string; hot?: number[]; hotColor?: string; d?: number }> = ({ text, lt, c, size, color, hot = [], hotColor = color, d = 0 }) => (
+  <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: `${8 * c.u}px ${24 * c.u}px`, direction: "rtl" }}>
+    {text.split(" ").filter(Boolean).map((w, i) => {
+      const s = sp(lt, d + i * 0.09, c.fps, 12, 150);
+      const k = Math.min(1, s);
+      const h = hot.includes(i);
+      return (
+        <span
+          key={i}
+          style={{
+            display: "inline-block",
+            fontWeight: 900,
+            fontSize: size * c.u,
+            lineHeight: 1.2,
+            color: h ? hotColor : color,
+            opacity: Math.min(1, s * 1.4),
+            transform: `translateY(${(1 - k) * 90 * c.u}px) scale(${0.72 + Math.min(1.12, s) * 0.28})`,
+            filter: k > 0.98 ? "none" : `blur(${(1 - k) * 12}px)`,
+            textShadow: h ? `0 0 ${40 * c.u}px ${hotColor}66` : "none",
+          }}
+        >
+          {w}
+        </span>
+      );
+    })}
+  </div>
+);
+
+const Node: React.FC<{ emoji: string; lt: number; d?: number; c: Ctx; size: number; color: string }> = ({ emoji, lt, d = 0, c, size, color }) => {
+  const s = sp(lt, d, c.fps, 9, 160);
+  const fl = Math.sin((lt - d) * 4) * 8 * c.u;
   return (
-    <AbsoluteFill style={{ background: "transparent" }}>
-      <Captions segments={segments} variant="karaoke" anchor="bottom" size={0.085} emoji={false} />
-      <ProgressBar color={SA.c} />
+    <div
+      style={{
+        width: size * c.u,
+        height: size * c.u,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size * 0.46 * c.u,
+        flexShrink: 0,
+        background: col("el", "#202830"),
+        border: `${4 * c.u}px solid ${color}`,
+        boxShadow: `0 0 ${60 * c.u}px ${color}55`,
+        opacity: Math.min(1, s * 2),
+        transform: `translateY(${fl}px) scale(${Math.min(1.15, s)})`,
+      }}
+    >
+      {emoji}
+    </div>
+  );
+};
+
+const Chip: React.FC<{ text: string; lt: number; d: number; c: Ctx; color: string; icon?: string; width?: number; size?: number }> = ({ text, lt, d, c, color, icon, width, size = 52 }) => (
+  <Pop
+    lt={lt}
+    d={d}
+    c={c}
+    rise
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 14 * c.u,
+      padding: `${24 * c.u}px ${40 * c.u}px`,
+      borderRadius: 999,
+      background: col("el", "#202830"),
+      border: `${3 * c.u}px solid ${color}`,
+      fontSize: size * c.u,
+      fontWeight: 800,
+      color: col("tx", "#FFFFFF"),
+      width: width ? width * c.u : undefined,
+      boxShadow: `0 ${10 * c.u}px ${40 * c.u}px ${color}33`,
+    }}
+  >
+    {icon ? <span>{icon}</span> : null}
+    <span>{text}</span>
+  </Pop>
+);
+
+const StatRing: React.FC<{ value: number; unit: string; lt: number; c: Ctx; color: string }> = ({ value, unit, lt, c, color }) => {
+  const p = Easing.out(Easing.cubic)(interpolate(lt, [0.1, 1.3], [0, 1], clampO));
+  const R = 220;
+  const C2 = 2 * Math.PI * R;
+  const frac = Math.min(1, unit === "%" ? value / 100 : 0.75);
+  const shown = Number.isInteger(value) ? Math.round(value * p) : Math.round(value * p * 10) / 10;
+  const s = sp(lt, 0, c.fps);
+  return (
+    <div style={{ position: "relative", width: 520 * c.u, height: 520 * c.u, transform: `scale(${0.7 + Math.min(1.1, s) * 0.3})`, opacity: Math.min(1, s * 1.6) }}>
+      <svg width={520 * c.u} height={520 * c.u} viewBox="0 0 520 520" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="260" cy="260" r={R} fill="none" stroke={col("line", "#26313A")} strokeWidth="34" />
+        <circle cx="260" cy="260" r={R} fill="none" stroke={color} strokeWidth="34" strokeLinecap="round" strokeDasharray={`${C2 * frac * p} ${C2}`} />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", direction: "ltr", fontSize: 150 * c.u, fontWeight: 900, color: col("tx", "#FFFFFF") }}>
+        {shown}
+        {unit === "%" ? "%" : ""}
+      </div>
+    </div>
+  );
+};
+
+const SceneBody: React.FC<{ L: any; lt: number; c: Ctx; pal: string[] }> = ({ L, lt, c, pal }) => {
+  const k: string[] = L.keys || [];
+  const e: string = L.emoji || "✨";
+  const tx = col("tx", "#FFFFFF");
+  const tx2 = col("tx2", "#9AA5AE");
+  const ok = col("ok", "#36C98F");
+  const pick = (n: number) => (k.length ? k : [String(L.text).slice(0, 24)]).slice(0, n);
+  if (L.type === "intro") {
+    return (
+      <>
+        <Node emoji={e} lt={lt} c={c} size={320} color={pal[0]} />
+        <Words text={k[0] || String(L.text)} lt={lt} d={0.15} c={c} size={110} color={tx} hot={[0]} hotColor={pal[0]} />
+        <Pop lt={lt} d={0.4} c={c} rise style={{ fontSize: 44 * c.u, color: tx2, fontWeight: 600 }}>
+          {k.slice(1).join(" · ")}
+        </Pop>
+      </>
+    );
+  }
+  if (L.type === "question") {
+    return (
+      <>
+        <Pop lt={lt} c={c} style={{ fontSize: 340 * c.u, fontWeight: 900, color: pal[0], lineHeight: 1, textShadow: `0 0 ${80 * c.u}px ${pal[0]}77` }}>
+          ؟
+        </Pop>
+        <Words text={String(L.text).replace(/[؟?]/g, "")} lt={lt} d={0.25} c={c} size={68} color={tx} />
+      </>
+    );
+  }
+  if (L.type === "stat") {
+    const n = L.num || { value: 0, unit: "" };
+    const tail = n.unit && n.unit !== "%" ? n.unit : k[0] || "";
+    return (
+      <>
+        <StatRing value={Number(n.value) || 0} unit={n.unit || ""} lt={lt} c={c} color={pal[0]} />
+        <Pop lt={lt} d={0.5} c={c} rise style={{ fontSize: 50 * c.u, fontWeight: 800, color: tx }}>
+          {tail}
+        </Pop>
+      </>
+    );
+  }
+  if (L.type === "flow") {
+    const a = [k[0] || "أ", k[1] || "ب", k[2] || "ج"];
+    const em = ["🔹", e, "✅"];
+    return (
+      <div style={{ display: "flex", alignItems: "center", direction: "rtl" }}>
+        {a.map((x, j) => (
+          <div key={j} style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <Node emoji={em[j]} lt={lt} d={j * 0.28} c={c} size={200} color={pal[j % pal.length]} />
+              <Pop lt={lt} d={j * 0.28 + 0.12} c={c} rise style={{ fontSize: 44 * c.u, fontWeight: 800, marginTop: 18 * c.u, color: tx }}>
+                {x}
+              </Pop>
+            </div>
+            {j < 2 ? (
+              <Pop lt={lt} d={j * 0.28 + 0.2} c={c} style={{ fontSize: 80 * c.u, color: pal[0], margin: `0 ${14 * c.u}px` }}>
+                ←
+              </Pop>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (L.type === "compare") {
+    const a = L.a || k[0] || "أ";
+    const b = L.b || k[1] || "ب";
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 22 * c.u, direction: "rtl" }}>
+        <Chip text={a} icon={e} lt={lt} d={0} c={c} color={pal[0]} width={340} size={44} />
+        <Pop lt={lt} d={0.2} c={c} style={{ fontSize: 80 * c.u, fontWeight: 900, color: tx2 }}>
+          VS
+        </Pop>
+        <Chip text={b} icon="⚖️" lt={lt} d={0.3} c={c} color={pal[1]} width={340} size={44} />
+      </div>
+    );
+  }
+  if (L.type === "cycle") {
+    const a = [k[0] || "١", k[1] || "٢", k[2] || "٣"];
+    const R = 230;
+    const C2 = 2 * Math.PI * R;
+    const p = Easing.inOut(Easing.cubic)(interpolate(lt, [0.1, 1.3], [0, 1], clampO));
+    return (
+      <div style={{ position: "relative", width: 640 * c.u, height: 640 * c.u }}>
+        <svg width={640 * c.u} height={640 * c.u} viewBox="0 0 640 640" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}>
+          <circle cx="320" cy="320" r={R} fill="none" stroke={pal[0]} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${C2 * p} ${C2}`} />
+        </svg>
+        {a.map((x, j) => {
+          const g = ((-90 + j * 120) * Math.PI) / 180;
+          const cx = 320 + R * Math.cos(g);
+          const cy = 320 + R * Math.sin(g);
+          return (
+            <div key={j} style={{ position: "absolute", left: (cx - 90) * c.u, top: (cy - 80) * c.u, width: 180 * c.u, display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <Node emoji={["🔄", e, "✅"][j]} lt={lt} d={0.2 + j * 0.3} c={c} size={150} color={pal[j % pal.length]} />
+              <Pop lt={lt} d={0.3 + j * 0.3} c={c} rise style={{ fontSize: 38 * c.u, fontWeight: 800, marginTop: 10 * c.u, color: tx }}>
+                {x}
+              </Pop>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  if (L.type === "recap") {
+    return (
+      <>
+        <Pop lt={lt} c={c} style={{ fontSize: 90 * c.u, fontWeight: 900, color: ok }}>
+          الخلاصة
+        </Pop>
+        {pick(3).map((x, j) => (
+          <Chip key={j} text={x} icon="✓" lt={lt} d={0.2 + j * 0.22} c={c} color={ok} />
+        ))}
+      </>
+    );
+  }
+  if (L.type === "cards") {
+    return (
+      <>
+        {pick(3).map((x, j) => (
+          <Chip key={j} text={x} icon={["🔹", "🔸", "🔷"][j]} lt={lt} d={j * 0.2} c={c} color={pal[j % pal.length]} width={700} size={58} />
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      <Node emoji={e} lt={lt} c={c} size={300} color={pal[0]} />
+      <div style={{ display: "flex", gap: 20 * c.u, flexWrap: "wrap", justifyContent: "center" }}>
+        {pick(3).map((x, j) => (
+          <Chip key={j} text={x} lt={lt} d={0.2 + j * 0.2} c={c} color={pal[j % pal.length]} />
+        ))}
+      </div>
+    </>
+  );
+};
+
+const Caps: React.FC<{ words: any[]; t: number; u: number }> = ({ words, t, u }) => {
+  if (!words.length) return null;
+  let wi = 0;
+  words.forEach((w, i) => {
+    if (t >= w.start - 0.08) wi = i;
+  });
+  const g = Math.floor(wi / 3) * 3;
+  const ch = words.slice(g, g + 3);
+  if (!ch.length || t < ch[0].start - 0.08) return null;
+  const o = interpolate(t, [ch[0].start - 0.08, ch[0].start + 0.05], [0, 1], clampO);
+  return (
+    <div style={{ position: "absolute", left: 70 * u, right: 70 * u, top: 1300 * u, height: 420 * u, display: "flex", flexWrap: "wrap", gap: `${6 * u}px ${22 * u}px`, justifyContent: "center", alignContent: "flex-start", direction: "rtl", opacity: o }}>
+      {ch.map((w, j) => {
+        const on = t >= w.start;
+        const hot = on && String(w.text).length >= 5;
+        return (
+          <span key={j} style={{ fontSize: 88 * u, fontWeight: 900, lineHeight: 1.35, color: hot ? col("ac", "#27B8C7") : on ? col("tx", "#FFFFFF") : col("tx2", "#9AA5AE"), opacity: on ? 1 : 0.55 }}>
+            {w.text}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
+export const Motion: React.FC<any> = (props) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height, durationInFrames } = useVideoConfig();
+  let inp: any = {};
+  try {
+    inp = getInputProps() || {};
+  } catch (e) {}
+  const scenesIn: any[] = (props.scenes && props.scenes.length ? props.scenes : inp.scenes) || [];
+  const segments: any[] = (props.segments && props.segments.length ? props.segments : inp.segments) || [];
+  const wordsIn: any[] = (props.words && props.words.length ? props.words : inp.words) || [];
+  const words: any[] = wordsIn.length ? wordsIn : segments.reduce((acc: any[], s: any) => acc.concat(s.words || []), []);
+  const D = durationInFrames / fps;
+  const n = LINES.length;
+  const starts: number[] = LINES.map((_, i) => (scenesIn.length === n ? (i === 0 ? 0 : Number(scenesIn[i].start)) : (i * D) / n));
+  const t = frame / fps;
+  const land = width > height * 1.05;
+  const u = land ? Math.min(width / 1080, height / 1920) : Math.max(width / 1080, height / 1920);
+  const c: Ctx = { u, fps };
+  const pal = [col("ac", "#27B8C7"), col("ac2", "#5978FF"), col("ok", "#36C98F")];
+  const burstColors = pal.concat([col("warn", "#F28A30")]);
+  const gx = Math.sin(t * 0.5) * 60 * u;
+  const gy = Math.cos(t * 0.4) * 50 * u;
+  return (
+    <AbsoluteFill style={{ background: col("bg", "#0C1014"), fontFamily: FONT, direction: "rtl", overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: (width - 1080 * u) / 2, top: (height - 1920 * u) / 2, width: 1080 * u, height: 1920 * u }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage: `linear-gradient(rgba(154,165,174,.07) ${2 * u}px, transparent ${2 * u}px), linear-gradient(90deg, rgba(154,165,174,.07) ${2 * u}px, transparent ${2 * u}px)`,
+            backgroundSize: `${90 * u}px ${90 * u}px`,
+          }}
+        />
+        <div style={{ position: "absolute", width: 900 * u, height: 900 * u, borderRadius: "50%", filter: `blur(${120 * u}px)`, opacity: 0.22, background: pal[0], top: -200 * u + gy, left: -250 * u + gx }} />
+        <div style={{ position: "absolute", width: 900 * u, height: 900 * u, borderRadius: "50%", filter: `blur(${120 * u}px)`, opacity: 0.22, background: pal[1], bottom: -300 * u - gy, right: -300 * u - gx }} />
+        <div style={{ position: "absolute", top: 110 * u, right: 70 * u, display: "flex", gap: 16 * u, alignItems: "center", fontSize: 38 * u, fontWeight: 700, color: col("tx2", "#9AA5AE") }}>
+          <i style={{ width: 18 * u, height: 18 * u, borderRadius: "50%", background: pal[0], display: "block", boxShadow: `0 0 ${24 * u}px ${pal[0]}` }} />
+          <span>{SERIES}</span>
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: 230 * u,
+            left: 70 * u,
+            width: 940 * u,
+            height: 1000 * u,
+            borderRadius: 56 * u,
+            background: col("card", "#161C22"),
+            border: `${3 * u}px solid ${col("line", "#26313A")}`,
+            overflow: "hidden",
+            boxShadow: `0 ${40 * u}px ${120 * u}px rgba(0,0,0,.45)`,
+          }}
+        >
+          {LINES.map((L, i) => {
+            const a = starts[i];
+            const b = i < n - 1 ? starts[i + 1] : D;
+            if (!(t >= a - 0.12 && t < b + 0.12)) return null;
+            const lt = t - a;
+            const fin = interpolate(t, [a - 0.12, a + 0.18], [0, 1], clampO);
+            const fout = 1 - interpolate(t, [b - 0.08, b + 0.12], [0, 1], clampO);
+            const push = 1.01 + 0.03 * Math.min(1, Math.max(0, lt / Math.max(0.5, b - a)));
+            return (
+              <div
+                key={i}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 34 * u,
+                  padding: 60 * u,
+                  textAlign: "center",
+                  opacity: Math.min(fin, fout),
+                  transform: `scale(${push})`,
+                  color: col("tx", "#FFFFFF"),
+                }}
+              >
+                <SceneBody L={L} lt={lt} c={c} pal={pal} />
+              </div>
+            );
+          })}
+        </div>
+        {SHOW_CAPTIONS ? <Caps words={words} t={t} u={u} /> : null}
+        <div style={{ position: "absolute", left: 70 * u, right: 70 * u, bottom: 130 * u, height: 10 * u, borderRadius: 9, background: col("el", "#202830"), overflow: "hidden", direction: "ltr" }}>
+          <div style={{ height: "100%", width: `${Math.min(100, (frame / durationInFrames) * 100)}%`, background: `linear-gradient(90deg, ${pal[0]}, ${pal[1]})` }} />
+        </div>
+      </div>
+      {LINES.map((L, i) =>
+        L.type === "intro" || L.type === "recap" ? (
+          frame - Math.round(starts[i] * fps) >= 0 && frame - Math.round(starts[i] * fps) < 80 ? <Burst key={i} at={Math.round(starts[i] * fps) + 4} colors={burstColors} n={30} /> : null
+        ) : null
+      )}
     </AbsoluteFill>
   );
 };
 """
+
+
+def theme_vars(theme):
+    css = THEMES.get(theme, THEMES["sci"])[1]
+    return dict(re.findall(r"--([a-z0-9]+):(#[0-9A-Fa-f]{3,8})", css))
+
+
+def build_roles_tsx(scenes, series, captions, theme):
+    out = MERGE_ROLES_TSX.replace("__THEME__", _esc_js(theme_vars(theme)))
+    out = out.replace("__SERIES__", _esc_js(series)).replace("__CAPTIONS__", "true" if captions else "false")
+    return out.replace("__LINES__", _esc_js(scenes))
+
 
 HF_TEMPLATES = {
     "hf_explainer": ("شرح علمي (HyperFrames)", None),
@@ -500,8 +881,8 @@ def build_from_script(script, engine="hyperframes", title="", series="علوم �
         code = (nar + "\n\n" if nar else "") + from_tpl
         return {"engine": "remotion", "code": code, "scenes": scenes, "hf": "", "remotion": code}
     if engine == "merge":
-        hf = build_explainer_html(scenes, title, series, captions=False, narration=nar, theme=theme)
-        rem = MERGE_OVERLAY_TSX
+        hf = build_explainer_html(scenes, title, series, captions=captions, narration=nar, theme=theme)
+        rem = build_roles_tsx(scenes, series, captions, theme)
         combined = "//@@ENGINE hyperframes\n" + hf + "\n//@@ENGINE remotion\n" + rem
         return {"engine": "merge", "code": combined, "scenes": scenes, "hf": hf, "remotion": rem}
     hf = build_explainer_html(scenes, title, series, captions=captions, narration=nar, theme=theme)
@@ -639,6 +1020,104 @@ def normalize_cuts(cuts, duration, default="hyperframes"):
     return out
 
 
+ROLE_ENGINE = {"intro": "remotion", "question": "remotion", "stat": "remotion", "recap": "remotion",
+               "compare": "hyperframes", "cycle": "hyperframes", "flow": "hyperframes", "cards": "hyperframes", "concept": "hyperframes"}
+ROLE_NAMES = {"hyperframes": "HyperFrames", "remotion": "Remotion"}
+MIN_PART = 1.2
+XFADES = ("wipeleft", "circleopen", "slideright", "fade", "smoothleft", "wiperight", "dissolve")
+
+
+def _join_same(parts):
+    out = []
+    for a, b, e in parts:
+        if out and out[-1][2] == e:
+            out[-1][1] = b
+        else:
+            out.append([a, b, e])
+    return out
+
+
+def plan_roles(props, frames, fps):
+    """يوزّع المشاهد على المحركين حسب نوعها: Remotion للمشاهد الحركية (مقدمة/سؤال/رقم/خلاصة) وHyperFrames للمشاهد التركيبية (مقارنة/دورة/خطوات/نقاط)."""
+    dur = frames / fps
+    sc = [s for s in ((props or {}).get("scenes") or []) if isinstance(s, dict) and s.get("text")]
+    if len(sc) >= 2:
+        types = classify([str(s["text"]) for s in sc])
+        starts = [0.0]
+        for s in sc[1:]:
+            try:
+                v = float(s.get("start", 0))
+            except (TypeError, ValueError):
+                v = starts[-1]
+            starts.append(max(starts[-1], min(dur, v)))
+        ends = starts[1:] + [dur]
+        raw = [[a, b, ROLE_ENGINE.get(ty, "hyperframes")] for a, b, ty in zip(starts, ends, types)]
+    else:
+        n = max(2, min(8, int(round(dur / 3.5))))
+        raw = [[i * dur / n, (i + 1) * dur / n, "hyperframes" if i % 2 == 0 else "remotion"] for i in range(n)]
+    parts = _join_same(raw)
+    while len(parts) > 1:
+        short = next((i for i, p in enumerate(parts) if p[1] - p[0] < MIN_PART), None)
+        if short is None:
+            break
+        if short > 0:
+            parts[short - 1][1] = parts[short][1]
+        else:
+            parts[short + 1][0] = parts[short][0]
+        del parts[short]
+        parts = _join_same(parts)
+    parts[0][0] = 0.0
+    parts[-1][1] = dur
+    return [{"from": p[0], "to": p[1], "engine": p[2]} for p in parts]
+
+
+def role_bounds(plan, frames, fps):
+    out = []
+    for c in plan[:-1]:
+        lo = (out[-1] if out else 0) + 1
+        out.append(max(lo, min(frames - 1, int(round(c["to"] * fps)))))
+    return out
+
+
+def _ffmpeg(args, label):
+    r = subprocess.run(args, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(label + ": " + r.stderr[-700:])
+
+
+def _encode_tail(fps, out):
+    return ["-map", "[v]", "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart", out]
+
+
+def join_roles(parts, bounds, frames, fps, h, out):
+    """يربط المقاطع بانتقالات حقيقية (xfade) متمركزة على حدود المشاهد، فيبقى الطول وتزامن الصوت كما هما."""
+    args = ["ffmpeg", "-y", "-v", "error"]
+    for p in parts:
+        args += ["-i", p[0]]
+    td = 2 * h / fps
+    chain, last = [], "[0:v]"
+    for k in range(1, len(parts)):
+        name = f"[x{k}]"
+        chain.append(f"{last}[{k}:v]xfade=transition={XFADES[(k - 1) % len(XFADES)]}:duration={td:.4f}:offset={(bounds[k - 1] - h) / fps:.4f}{name}")
+        last = name
+    fc = ";".join(chain) + f";{last}format=yuv420p[v]"
+    _ffmpeg(args + ["-filter_complex", fc] + _encode_tail(fps, out), "ffmpeg xfade")
+
+
+def join_hard(parts, bounds, frames, fps, out):
+    n = len(parts)
+    args = ["ffmpeg", "-y", "-v", "error"]
+    for p in parts:
+        args += ["-i", p[0]]
+    segs = []
+    for i, p in enumerate(parts):
+        a = (bounds[i - 1] if i > 0 else 0) - p[1]
+        b = (bounds[i] if i < n - 1 else frames) - p[1]
+        segs.append(f"[{i}:v]trim=start_frame={a}:end_frame={b},setpts=PTS-STARTPTS[v{i}]")
+    fc = ";".join(segs) + ";" + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0,format=yuv420p[v]"
+    _ffmpeg(args + ["-filter_complex", fc] + _encode_tail(fps, out), "ffmpeg concat")
+
+
 def render(host, jid, d, J, props, pub, out, cfg, remotion_spec_base=None):
     """رندر المحركات غير Remotion-الخالص. -> (rc, err, tail). النتيجة تُكتب في out (mp4 بلا صوت أو مع صوت Remotion)."""
     eng = d.get("engine")
@@ -679,6 +1158,54 @@ def render(host, jid, d, J, props, pub, out, cfg, remotion_spec_base=None):
     m = d.get("merge") or {}
     kind = m.get("mode", "layers")
     tmp = f"{W}/out/{jid}_mg"
+    if d.get("merge_roles"):
+        plan = plan_roles(props, frames, fps)
+        d.setdefault("engine_warnings", []).append("توزيع الأدوار: " + " ← ".join(f"{ROLE_NAMES[c['engine']]} {c['from']:.1f}-{c['to']:.1f}ث" for c in plan))
+        if mode == "still":
+            t = cfg.get("still_frame", 0)
+            cur = next((c for c in plan if t < int(round(c["to"] * fps))), plan[-1])
+            if cur["engine"] == "remotion":
+                rs = rem_spec(out); rs["mode"] = "still"; rs["frame"] = t
+                rc, err, tail = run_rem(rs, 10, 90)
+                if rc == 0 or J.get("cancelled"): return rc, err, tail
+                d["engine_warnings"].append("فشلت لقطة Remotion فرُندرت بـ HyperFrames: " + _first_line(err or "\n".join(tail[-3:])))
+            s = hf_spec(out); s["mode"] = "still"; s["frame"] = t
+            return run_hf(host, jid, J, s)
+        bounds = role_bounds(plan, frames, fps)
+        n = len(plan)
+        h = max(2, min(8, int(round(fps * 0.2))))
+        parts = []
+        for i, c in enumerate(plan):
+            s0 = 0 if i == 0 else max(0, bounds[i - 1] - h)
+            e0 = frames if i == n - 1 else min(frames, bounds[i] + h)
+            lo, hi = 2 + int(i / n * 84), 2 + int((i + 1) / n * 84)
+            pth = f"{tmp}_r{i}.mp4"
+            J.update(stage=f"مقطع {i + 1}/{n}: {ROLE_NAMES[c['engine']]}", progress=lo)
+            if c["engine"] == "hyperframes":
+                rc, err, tail = run_hf(host, jid, J, hf_spec(pth, False, s0, e0), lo, hi)
+            else:
+                rc, err, tail = run_rem(rem_spec(pth, False, s0, e0), lo, hi)
+                if rc != 0 and not J.get("cancelled"):
+                    d["engine_warnings"].append(f"فشل مقطع Remotion ({c['from']:.1f}-{c['to']:.1f}ث) فرُندر بـ HyperFrames بدلاً منه: " + _first_line(err or "\n".join(tail[-3:])))
+                    rc, err, tail = run_hf(host, jid, J, hf_spec(pth, False, s0, e0), lo, hi)
+            if rc != 0: return rc, err, tail
+            parts.append((pth, s0))
+        if n == 1:
+            shutil.move(parts[0][0], out)
+            return 0, None, []
+        J.update(stage="دمج المقاطع بانتقالات", progress=88)
+        try:
+            try:
+                join_roles(parts, bounds, frames, fps, h, out)
+            except Exception as e1:
+                d["engine_warnings"].append("تعذّرت الانتقالات فاستُخدم قطع مباشر: " + _first_line(str(e1)))
+                join_hard(parts, bounds, frames, fps, out)
+        except Exception as e2:
+            return 1, str(e2), []
+        for p in parts:
+            try: os.remove(p[0])
+            except Exception: pass
+        return 0, None, []
     if mode == "still":
         # لقطة مدموجة: نرندر الطبقتين كلقطة واحدة ثم نركّب
         t = cfg.get("still_frame", 0)
@@ -771,7 +1298,7 @@ def register(app, host):
             {"id": "hyperframes", "name": "HyperFrames", "desc": "HTML حتمي · سريع وخفيف", "ready": st["ready"], "why": st.get("why")},
             {"id": "merge", "name": "دمج", "desc": "طبقات أو تتابع بين المحركين", "ready": st["ready"], "why": st.get("why")}],
             "themes": [{"id": k, "name": v[0]} for k, v in THEMES.items()],
-            "templates": [{"id": k, "name": v[0]} for k, v in HF_TEMPLATES.items()] + [{"id": "merge_pro", "name": "دمج احترافي (طبقات)"}]})
+            "templates": [{"id": k, "name": v[0]} for k, v in HF_TEMPLATES.items()] + [{"id": "merge_pro", "name": "دمج احترافي (أدوار)"}]})
 
     @app.route("/api/hf/template/<name>")
     def api_hf_template(name):

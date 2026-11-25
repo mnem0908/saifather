@@ -31,8 +31,8 @@ CARDS = r"""
   </div>
   <div id="mergeBox" style="display:none">
    <label class="l" style="margin-top:0">طريقة الدمج</label>
-   <select class="in" id="mgMode"><option value="layers">طبقات — فوق بعض (شفافية)</option><option value="sequence">تتابع — كل مقطع زمني بمحرك</option></select>
-   <div id="mgLayers"><label class="l">الطبقة العلوية (الشفافة)</label>
+   <select class="in" id="mgMode"><option value="roles">أدوار — كل محرك يرندر مشاهده بانتقالات حقيقية</option><option value="sequence">تتابع — مقاطع زمنية تحددها أنت</option><option value="layers">طبقات — فوق بعض (شفافية)</option></select>
+   <div id="mgLayers" style="display:none"><label class="l">الطبقة العلوية (الشفافة)</label>
     <select class="in" id="mgTop"><option value="remotion">Remotion فوق HyperFrames</option><option value="hyperframes">HyperFrames فوق Remotion</option></select>
     <label class="l">شفافية الطبقة العلوية <span id="mgOpV">100%</span></label><input type="range" id="mgOp" min="10" max="100" value="100"></div>
    <div id="mgSeq" style="display:none"><label class="l">المقاطع (ثانية-ثانية محرك)</label>
@@ -66,12 +66,13 @@ PIPE = r"""<div class="pipe" id="pipe"><span data-s="script">سكربت</span><s
 JS = r"""
 /* ===== SAE: المحركات + السكربت + المشروع ===== */
 const SAE={eng:'remotion',tab:'remotion',codes:{remotion:'',hyperframes:''},engines:null};
+window.SAE=SAE;
 (function(){
  const HINTS={remotion:'Remotion: كود React/TSX — الأنسب للقوالب الغنية والانتقالات.',
   hyperframes:'HyperFrames: تركيبة HTML حتمية (data-start / data-duration أو window.drawFrame(t)) — رندر خفيف بلا حزم ثقيلة.',
-  merge:'الدمج: اكتب/ولّد كوداً للمحركين (تبويبان فوق المحرر). «طبقات» = HyperFrames خلفية + Remotion شفاف فوقها، أو العكس. «تتابع» = كل مقطع زمني بمحرك.'};
+  merge:'الدمج: اكتب/ولّد كوداً للمحركين (تبويبان فوق المحرر). «أدوار» = Remotion يتولى المشاهد الحركية (مقدمة · سؤال · رقم · خلاصة) وHyperFrames يتولى المشاهد التركيبية (مقارنة · دورة · خطوات · نقاط) ويُربطان بانتقالات. «تتابع» = مقاطع زمنية تحددها. «طبقات» = شفافية فوق بعض.'};
  const origSave=window.save;
- function persist(){try{lsSet('sa_codes',JSON.stringify(SAE.codes));lsSet('sa_eng',SAE.eng);lsSet('sa_merge',JSON.stringify(mergeCfg(true)));lsSet('sa_script',$('sScript').value);lsSet('sa_series',$('sSeries').value)}catch(e){}}
+ function persist(){try{lsSet('sa_codes',JSON.stringify(SAE.codes));lsSet('sa_eng',SAE.eng);lsSet('sa_merge2',JSON.stringify(mergeCfg(true)));lsSet('sa_script',$('sScript').value);lsSet('sa_series',$('sSeries').value)}catch(e){}}
  function sync(){SAE.codes[SAE.tab]=code.value}
  window.save=function(){sync();if(SAE.tab==='remotion'){origSave()}else{$('saved').textContent='saved';setTimeout(()=>$('saved').textContent='',1200)}persist()};
  function parseCuts(){const out=[];($('mgCuts').value||'').split(/\n+/).forEach(l=>{const m=l.trim().match(/^([\d.]+)\s*[-–—~]\s*([\d.]+)\s*(remotion|hyperframes|hf|rem|r|h)?/i);if(!m)return;
@@ -107,13 +108,13 @@ const SAE={eng:'remotion',tab:'remotion',codes:{remotion:'',hyperframes:''},engi
   if(!code.value.trim())return log('الكود فارغ','e');status('فحص',1);
   try{const r=await (await postJ('/api/hf/check',{code:code.value})).json();(r.notes||[]).forEach(n=>log(n,/^تنبيه/.test(n)?'h':'e'));if(r.ok)log('كود HyperFrames سليم','s')}catch(e){log('فشل الفحص: '+e.message,'e')}status('جاهز')};
  // دمج: عناصر التحكم
- function paintMerge(){const seq=$('mgMode').value==='sequence';$('mgLayers').style.display=seq?'none':'block';$('mgSeq').style.display=seq?'block':'none';$('mgOpV').textContent=$('mgOp').value+'%';persist()}
+ function paintMerge(){const md=$('mgMode').value;$('mgLayers').style.display=md==='layers'?'block':'none';$('mgSeq').style.display=md==='sequence'?'block':'none';$('mgOpV').textContent=$('mgOp').value+'%';persist()}
  $('mgMode').onchange=paintMerge;$('mgTop').onchange=persist;$('mgDef').onchange=persist;$('mgOp').oninput=paintMerge;$('mgCuts').oninput=persist;
  $('mgAuto').onclick=()=>{const d=getDur(),n=Math.max(2,Math.min(6,Math.round(d/4))),st=d/n;let o=[];for(let i=0;i<n;i++)o.push(`${(i*st).toFixed(1)}-${((i+1)*st).toFixed(1)} ${i%2?'remotion':'hyperframes'}`);$('mgCuts').value=o.join('\n');persist()};
  // الطلب: يُضاف المحرك والأكواد
  SAE.decorate=function(b){sync();b.engine=SAE.eng;
   if(SAE.eng==='hyperframes'){b.code=SAE.codes.hyperframes;b.hf_code=SAE.codes.hyperframes}
-  else if(SAE.eng==='merge'){b.code=SAE.codes.remotion;b.hf_code=SAE.codes.hyperframes;b.merge=mergeCfg(false)}
+  else if(SAE.eng==='merge'){b.code=SAE.codes.remotion;b.hf_code=SAE.codes.hyperframes;const mc=mergeCfg(false);if(mc.mode==='roles'){b.merge_roles=true;mc.mode='sequence'}b.merge=mc}
   return b};
  // السكربت ← تصميم
  $('sVoiceTg').onclick=()=>$('sVoiceTg').classList.toggle('on');$('sCapTg').onclick=()=>$('sCapTg').classList.toggle('on');
@@ -168,7 +169,7 @@ const SAE={eng:'remotion',tab:'remotion',codes:{remotion:'',hyperframes:''},engi
  // تهيئة
  (function init(){let c={};try{c=JSON.parse(lsGet('sa_codes')||'{}')}catch(e){}
   SAE.codes.remotion=code.value;SAE.codes.hyperframes=c.hyperframes||'';
-  try{const m=JSON.parse(lsGet('sa_merge')||'{}');if(m.mode)$('mgMode').value=m.mode;if(m.top)$('mgTop').value=m.top;if(m.default)$('mgDef').value=m.default;if(m.opacity)$('mgOp').value=Math.round(m.opacity*100);$('mgCuts').value=m.cutsText||''}catch(e){}
+  try{const m=JSON.parse(lsGet('sa_merge2')||'{}');if(m.mode)$('mgMode').value=m.mode;if(m.top)$('mgTop').value=m.top;if(m.default)$('mgDef').value=m.default;if(m.opacity)$('mgOp').value=Math.round(m.opacity*100);$('mgCuts').value=m.cutsText||''}catch(e){}
   $('sTheme').value=lsGet('sa_theme')||'sci';$('sTheme').onchange=()=>lsSet('sa_theme',$('sTheme').value);
   $('sScript').value=lsGet('sa_script')||'';$('sSeries').value=lsGet('sa_series')||'';paintMerge();
   setEngine(lsGet('sa_eng')||'remotion',true);
