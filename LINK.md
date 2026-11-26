@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://apply-stem-porter-screenshot.trycloudflare.com
+الرابط الحالي المباشر: https://transit-random-measurement-unified.trycloudflare.com
 
-آخر تحديث: 2026-11-26 08:53 UTC — تشغيل رقم 45786727188
+آخر تحديث: 2026-11-26 14:13 UTC — تشغيل رقم 45836576083
