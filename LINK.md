@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://greatly-appreciate-seeks-behavior.trycloudflare.com
+الرابط الحالي المباشر: https://apply-stem-porter-screenshot.trycloudflare.com
 
-آخر تحديث: 2026-11-26 03:32 UTC — تشغيل رقم 45749423925
+آخر تحديث: 2026-11-26 08:53 UTC — تشغيل رقم 45786727188
