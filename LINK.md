@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://bass-annie-sectors-best.trycloudflare.com
+الرابط الحالي المباشر: https://expects-courts-talked-suppliers.trycloudflare.com
 
-آخر تحديث: 2026-11-27 11:36 UTC — تشغيل رقم 45991561115
+آخر تحديث: 2026-11-27 16:56 UTC — تشغيل رقم 46037572637
