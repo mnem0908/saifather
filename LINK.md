@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://friendship-dimensions-mens-mapping.trycloudflare.com
+الرابط الحالي المباشر: https://corners-titans-affecting-responding.trycloudflare.com
 
-آخر تحديث: 2026-11-26 19:34 UTC — تشغيل رقم 45884419583
+آخر تحديث: 2026-11-27 00:54 UTC — تشغيل رقم 45919369347
