@@ -2,6 +2,6 @@
 
 الرابط الدائم: **https://mnem0908.github.io/saifather/** (يحوّلك تلقائياً إلى الرابط الحالي)
 
-الرابط الحالي المباشر: https://imaging-tuner-bra-vehicles.trycloudflare.com
+الرابط الحالي المباشر: https://become-served-pros-pgp.trycloudflare.com
 
-آخر تحديث: 2026-11-27 22:16 UTC — تشغيل رقم 46075506095
+آخر تحديث: 2026-11-28 03:37 UTC — تشغيل رقم 46103616426
